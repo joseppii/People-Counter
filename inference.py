@@ -36,32 +36,56 @@ class Network:
 
     def __init__(self):
         ### TODO: Initialize any class variables desired ###
+        self.plugin = None
+        self.network = None
+        self.exec_network = None
+        self.input_blob = None
+        self.output_blob = None
 
-    def load_model(self):
+    def load_model(self, model_xml, device, extension):
         ### TODO: Load the model ###
+        self.plugin = IECore()
+        model_bin = os.path.splitext(model_xml)[0]+".bin"
+        self.network = IENetwork(model=model_xml, weights=model_bin)
+        self.plugin.load_network(self.network, device)
+
         ### TODO: Check for supported layers ###
+        supported_layers = self.plugin.query_network(self.network, device)
+        unsupported_layers = [l for l in self.network.layers.keys() if l not in supported_layers]
+        if len(unsupported_layers) != 0:
+            return -1
+            
         ### TODO: Add any necessary extensions ###
+        self.plugin.add_extension(extension, device)
+
         ### TODO: Return the loaded inference plugin ###
+        self.exec_network = self.plugin.load_network(self.network, device)
+
         ### Note: You may need to update the function parameters. ###
+        self.input_blob = next(iter(self.network.inputs))
+        self.output_blob = next(iter(self.network.outputs))
+
         return
 
     def get_input_shape(self):
         ### TODO: Return the shape of the input layer ###
-        return
+        return self.exec_network.inputs[self.input_blob].shape
 
-    def exec_net(self):
+    def exec_net(self, req_id, image):
         ### TODO: Start an asynchronous request ###
+        self.exec_network.start_async(request=req_id, inputs={self.input_blob: image})
         ### TODO: Return any necessary information ###
         ### Note: You may need to update the function parameters. ###
         return
 
-    def wait(self):
+    def wait(self, req_id):
         ### TODO: Wait for the request to be complete. ###
+        status = self.exec_network.request[req_id].wait(-1)
         ### TODO: Return any necessary information ###
         ### Note: You may need to update the function parameters. ###
-        return
+        return status
 
-    def get_output(self):
+    def get_output(self,req_id):
         ### TODO: Extract and return the output results
         ### Note: You may need to update the function parameters. ###
-        return
+        return self.exec_network.requests[req_id].outputs[self.output_blob]
