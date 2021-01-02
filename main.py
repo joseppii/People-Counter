@@ -39,7 +39,7 @@ IPADDRESS = socket.gethostbyname(HOSTNAME)
 MQTT_HOST = IPADDRESS
 MQTT_PORT = 3001
 MQTT_KEEPALIVE_INTERVAL = 60
-
+STREAM_FILE = "resources/Pedestrian_Detect_2_1_1.mp4"
 
 def build_argparser():
     """
@@ -70,7 +70,8 @@ def build_argparser():
 
 def connect_mqtt():
     ### TODO: Connect to the MQTT client ###
-    client = None
+    client = mqtt.Client
+    client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
 
     return client
 
@@ -90,31 +91,58 @@ def infer_on_stream(args, client):
     prob_threshold = args.prob_threshold
 
     ### TODO: Load the model through `infer_network` ###
-
+    infer_network.load_model((args.model, args.device, args.cpu_extension)
+    
     ### TODO: Handle the input stream ###
+    cap = cv2.VideoCapture(STREAM_FILE)
+    cap.open(STREAM_FILE)
 
+    net_input_shape = infer_network.get_input_shape()
     ### TODO: Loop until stream is over ###
-
+    while cap.isOpened():
+        
         ### TODO: Read from the video capture ###
+        flag, frame = cap.read()
+        if not flag:
+            break
 
+        key_pressed = cv2.waitKey(60)
+        
         ### TODO: Pre-process the image as needed ###
+        p_frame = cv2.resize(frame, (net_input_shape[3], net_input_shape[2]))
+        p_frame = p_frame.transpose((2,0,1))
+        p_frame = p_frame.reshape(1, *p_frame.shape)
 
         ### TODO: Start asynchronous inference for specified request ###
+        infer_network.exec_net(0,p_frame)
+        #cv2.imshow('frame', frame)
 
         ### TODO: Wait for the result ###
-
+        status = infer_network.wait(0)
+        if status == 0:
             ### TODO: Get the results of the inference request ###
-
+            infer_out = infer_network.get_output()
             ### TODO: Extract any desired stats from the results ###
 
             ### TODO: Calculate and send relevant information on ###
             ### current_count, total_count and duration to the MQTT server ###
             ### Topic "person": keys of "count" and "total" ###
             ### Topic "person/duration": key of "duration" ###
+            client.publish("person", json.dumps({"count": count}))
+            client.publish("person", json.dumps({"total": total}))
+            client.publish("person/duration", json.dumps({"duration": duration}))
 
         ### TODO: Send the frame to the FFMPEG server ###
-
+        sys.stdout.buffer.write(frame)  
+        sys.stdout.flush()
         ### TODO: Write an output image if `single_image_mode` ###
+
+        if key_pressed == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    client.disconnect()
 
 
 def main():
